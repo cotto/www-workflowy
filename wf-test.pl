@@ -1,12 +1,12 @@
 #! env perl
 
 use strict;
-use feature qw/say/;
+use feature qw/say state/;
 use LWP;
 use Data::Dumper;
 use JSON;
 use Data::DPath qw/dpath/;
-use URL::Encode;
+use URL::Encode qw/url_encode/;
 
 
 my $username = 'test';
@@ -20,10 +20,9 @@ unless (log_in($ua, $username, $password)) {
 }
 
 my $wf_tree = get_wf_tree($ua);
-die Dumper(\$wf_tree);
 
 edit_item($ua, {
-    id => '5a4d3097-72d0-9029-ee63-7653c0624343',
+    id => '3fa535e1-06b3-4406-0e75-4ddba7c9d606',
     name => "updated!!!?!!",
     note => "and now it has a note",
   }, $wf_tree,
@@ -206,67 +205,96 @@ Modify the name and/or notes of an existing item.
 sub edit_item {
   my ($ua, $item_data, $wf_tree) = @_;
 
-  # TODO: deal with parents?
+  my $req = HTTP::Request->new(POST => 'https://workflowy.com/push_and_poll');
+  $req->content_type('application/x-www-form-urlencoded');
+  my $client_id = $wf_tree->{client_id};
+
+  my $edit_data = {
+    projectid => $item_data->{id},
+    name => $item_data->{name},
+  };
+
+  if (exists $item_data->{note}) {
+    $edit_data->{description} = $item_data->{note};
+  }
+
+  # build the push/poll data
+  my $push_poll_data = [
+    {
+      most_recent_operation_transaction_id => _last_transaction_id($ua),
+      operations => [
+        {
+          type => 'edit',
+          data => $edit_data,
+          
+          # The wf web client sends this, but it doesn't appear to be strictly necessary.
+          #undo_data => {
+          #  previous_last_modified => '????',
+          #  previous_name => '????',
+          #},
+          
+          # This also appears to be optional.
+          # client_timestamp => '?????',
+        },
+      ],
+    },
+  ];
+
+  my $push_poll_json = encode_json($push_poll_data);
+
+  my $req_data = join('&',
+    "client_id=$client_id".
+    "client_version=9",
+    "push_poll_id=".rand_string(8),
+    "push_poll_data=$push_poll_json");
+  
+  $req->content($req_data);
+  my $resp = $ua->request($req);
+
+}
+
+
+=item _last_transaction_id($ua) 
+
+Grab the id of the most recent transaction.
+
+=cut
+
+sub _last_transaction_id {
+
+  my ($ua) = @_;
+  state $transaction_id = "";
+
+  if ($transaction_id ne "") {
+    return $transaction_id;
+  }
   
   my $req = HTTP::Request->new(POST => 'https://workflowy.com/push_and_poll');
   $req->content_type('application/x-www-form-urlencoded');
   my $client_id = $wf_tree->{client_id};
 
-  # build the push/poll data
-  my $push_poll_data = {
-    most_recent_operation_transaction_id => '????',
-    operations => [
-      {
-        type => 'edit',
-        data => {
-          projectid => $item_data->{id},
-          name => $item_data->{name},
-        },
-        undo_data => {
-          previous_last_modified => '????',
-          previous_name => '????',
-        },
-        # number of minutes since this client joined + ((client start time in ms - current timestamp in ms) / 60000)
-        # client start time can be calculated from client_id
-        client_timestamp => '?????',
-      }
-    ],
-  };
+  my $push_poll_data = [
+    {
+      # Using a low value for this will cause workflowy to return all
+      # transactions since that one, so that's bad.  Using an invalid number
+      # causes an internal error in wf.  Using a number that's way too high
+      # will cause wf to send back the current
+      # new_most_recent_operation_transaction_id and no extra junk.
+      most_recent_operation_transaction_id => "999999999",
+    },
+  ];
 
-  my $push_poll_json = json_encode($push_poll_data);
-  my $push_poll_encoded = url_encode($push_poll_json);
+  my $push_poll_json = encode_json($push_poll_data);
 
-  my $req_data = "client_id=$client_id&".
-      "client_version=9&".
-      "push_poll_id=".rand_str(8)."&".
-      "push_poll_data=$push_poll_encoded";
-  $req_data = url_encode($req_data);
+  my $req_data = join('&',
+    "client_id=$client_id".
+    "client_version=9",
+    "push_poll_id=".rand_string(8),
+    "push_poll_data=$push_poll_json");
   
   $req->content($req_data);
-
-
-
-# editing an existing thing
-#  [{
-#    "most_recent_operation_transaction_id":"86362832",
-#    "operations":[{
-#      "type":"edit",
-#      "data":{
-#        "projectid":"3fa535e1-06b3-4406-0e75-4ddba7c9d606",
-#        "name":"a third item is now even awesomer"
-#      },
-#      "undo_data":{
-#        "previous_last_modified":1613527,
-#        "previous_name":"a third item??????"
-#      },
-#      "client_timestamp":1613541
-#    }]
-#  }]
-
-
-
-  
-
-
-
+  my $resp = $ua->request($req);
+  my $wf_json = $resp->decoded_content();
+  $transaction_id = decode_json($wf_json)->{results}[0]{new_most_recent_operation_transaction_id};
+  return $transaction_id;
 }
