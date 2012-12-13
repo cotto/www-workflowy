@@ -25,32 +25,36 @@ unless (log_in($ua, $username, $password)) {
 say "grabbing tree";
 my $wf_tree = get_wf_tree($ua);
 
-say "editing item";
+#say "editing item";
 #edit_item($ua, {
 #    id => '5a4d3097-72d0-9029-ee63-7653c0624343',
 #    name => "I've got a lovely bunch of coconuts.",
 #  }, $wf_tree,
 #);
-say "trying to create a child";
-create_item($ua, '3fa535e1-06b3-4406-0e75-4ddba7c9d606', {name => "child creation test number the fourth", priority => 2}, $wf_tree);
+#say "trying to create a child";
+#create_item($ua, '3fa535e1-06b3-4406-0e75-4ddba7c9d606', {name => "child creation test number the fourth", priority => 2}, $wf_tree);
 
-say "loggging out";
-log_out($ua); exit;
-
+#log_out($ua); exit;
 
 
+if (1) {
+my $children = $wf_tree ~~ dpath '//rootProjectChildren//nm[ value =~ /#food-log/ ]/..';
+my $date_weights = [];
 
-#my $children = $wf_tree ~~ dpath '//rootProjectChildren//nm[ value =~ /#food-log/ ]/..';
-#my $date_weights = [];
-#
-#foreach my $child (@$children) {
-#  my $date = $child->{nm};
-#  $date =~ s/#food-log //;
-#  my $weights = $child ~~ dpath '//nm[ value =~ /^weight/ ]';
-#  my $weight = $weights->[0];
-#  $weight =~ s/[^0-9.]//g;
-#  say "on $date, weight was $weight";
-#}
+foreach my $child (@$children) {
+  my $date = $child->{nm};
+  $date =~ s/#food-log //;
+  my $weights = $child ~~ dpath '//nm[ value =~ /^weight/ ]';
+  my $weight = $weights->[0];
+  $weight =~ s/[^0-9.]//g;
+  my $parent_id = find_parent_id($child->{id}, $wf_tree);
+  say "on $date, weight was $weight, parent is $parent_id";
+}
+}
+
+
+#my $parent_id = find_parent_id('de08c6ae-07d9-3043-bce3-a9680aa04e7e', $wf_tree);
+#say "parent is $parent_id";
 
 # GOAL:
 # * grab the weight info from all #food-log entries
@@ -62,20 +66,20 @@ log_out($ua); exit;
 #   * update the contents of the stats item
 
 
+say "logging out";
 log_out($ua);
 
 
   
-=item rand_string($len)
+=item _rand_string($len)
 
 Generate a random alnum string of $len characters.
 
 =cut
 
-sub rand_string {
+sub _rand_string {
   my $len = shift;
-  my $s = join "", map ('0'..'9','A'..'Z','a'..'z')[rand 62], 1..$len;
-  return $s
+  join "", map {('0'..'9','A'..'Z','a'..'z')[rand 62]} 1..$len;
 }
 
 
@@ -137,6 +141,20 @@ sub log_out {
 }
 
 
+=item find_parent_id($child_id, $wf_tree)
+
+Given the id of a valid child, return the id of its immediate parent.
+
+=cut
+
+sub find_parent_id {
+  my ($child_id, $wf_tree) = @_;
+
+  return $wf_tree->{parent_map}{ $child_id };
+}
+
+
+
 =item get_wf_tree($ua)
 
 Return a hashref containing all of the Workflowy tree for the current logged-in
@@ -167,7 +185,50 @@ sub get_wf_tree {
     #say "assigned $+{var_name} the value $+{var_json}";
   }
   $wf_tree->{start_time_in_ms} = floor( 1000 * str2time($wf_tree->{client_id}) );
+  _build_parent_map($wf_tree);
   return $wf_tree;
+}
+
+
+=item _build_parent_map($wf_tree)
+
+Calculate and cache information on each item's parents.
+
+=cut
+
+sub _build_parent_map {
+  my ($wf_tree) = @_;
+
+  $wf_tree->{parent_map} = {};
+  #say Dumper($wf_tree);
+
+  foreach my $child (@{$wf_tree->{main_project_tree_info}{rootProjectChildren}}) {
+    my $current_parent = 'root';
+    #say Dumper($child);
+    $wf_tree->{parent_map}{ $child->{id} } = $current_parent;
+    if (exists $child->{ch}) { 
+      _build_parent_map_rec($child->{id}, $child->{ch}, $wf_tree);
+    }
+  }
+  #say Dumper($wf_tree->{parent_map});
+}
+
+
+=item _build_parent_map_rec($children, $parent_id, $wf_tree)
+
+Helper for _build_parent_map.
+
+=cut
+
+sub _build_parent_map_rec {
+  my ($parent_id, $children, $wf_tree) = @_;
+
+  foreach my $child (@$children) {
+    $wf_tree->{parent_map}{ $child->{id} } = $parent_id;
+    if (exists $child->{ch}) {
+      _build_parent_map_rec($child->{id}, $child->{ch}, $wf_tree);
+    }
+  }
 }
 
 
@@ -204,7 +265,6 @@ sub edit_item {
           #  previous_name => '????',
           #},
           
-          # This also appears to be optional.
           client_timestamp => _client_timestamp($wf_tree),
         },
       ],
@@ -216,7 +276,7 @@ sub edit_item {
   my $req_data = join('&',
     "client_id=$client_id".
     "client_version=9",
-    "push_poll_id=".rand_string(8),
+    "push_poll_id="._rand_string(8),
     "push_poll_data=$push_poll_json");
   
   $req->content($req_data);
@@ -276,19 +336,19 @@ sub create_item {
   my $req_data = join('&',
     "client_id=$client_id".
     "client_version=9",
-    "push_poll_id=".rand_string(8),
+    "push_poll_id="._rand_string(8),
     "push_poll_data=$push_poll_json");
   
   $req->content($req_data);
   my $resp = $ua->request($req);
-  say Dumper($resp);
-
 }
 
 
 =item _client_timestamp($wf_tree)
 
-Calculate and return the client_timestamp, as expected by workflowy.
+Calculate and return the client_timestamp, as expected by workflowy.  Omitting
+this field from a request appears to have no effect, but I implemented it while
+debugging something else and don't see any reason not to keep the code around.
 
 =cut
 
@@ -300,9 +360,12 @@ sub _client_timestamp {
   # first connected.  Since this client does all its work less than a minute after
   # connecting, the second part of the calculation will always be zero.
   my $mins_since_joined = $wf_tree->{main_project_tree_info}{minutesSinceDateJoined};
-  my $curr_time_in_ms = floor( 1000 * DateTime->now()->epoch() );
-  my $start_time_in_ms = $wf_tree->{start_time_in_ms};
-  my $client_timestamp = $mins_since_joined + floor(($curr_time_in_ms - $start_time_in_ms) / 60_000);
+  
+  # The rest of these values will be needed if this client ever connects for
+  # more than one minute and wants to continue to return valid timestamps.
+  #my $curr_time_in_ms = floor( 1000 * DateTime->now()->epoch() );
+  #my $start_time_in_ms = $wf_tree->{start_time_in_ms};
+  #my $client_timestamp = $mins_since_joined + floor(($curr_time_in_ms - $start_time_in_ms) / 60_000);
   return $mins_since_joined;
 }
 
@@ -346,7 +409,7 @@ sub _last_transaction_id {
   my $req_data = join('&',
     "client_id=$client_id".
     "client_version=9",
-    "push_poll_id=".rand_string(8),
+    "push_poll_id="._rand_string(8),
     "push_poll_data=$push_poll_json");
   
   $req->content($req_data);
