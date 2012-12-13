@@ -74,7 +74,7 @@ Generate a random alnum string of $len characters.
 
 sub rand_string {
   my $len = shift;
-  my $s = join "", map ['0'..'9','A'..'Z','a'..'z']->[rand 62], 1..$len;
+  my $s = join "", map ('0'..'9','A'..'Z','a'..'z')[rand 62], 1..$len;
   return $s
 }
 
