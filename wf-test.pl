@@ -81,14 +81,14 @@ sub rand_string {
 
 =item _gen_uuid()
 
-Generate a uuid.
+Generate a uuid using rand as the source of entropy.
 
 =cut
 
 sub _gen_uuid {
   # 12345678-1234-1234-1234-123456789012
   # 8922a424-1e51-629c-efee-9e7facb70cce
-  join '-', map { join "", map {['0'..'9','a'..'f']->[rand 16]} 1..$_ } (8, 4, 4, 4, 12);
+  join '-', map { join "", map {('0'..'9','a'..'f')[rand 16]} 1..$_ } qw/8 4 4 4 12/;
 }
 
 
