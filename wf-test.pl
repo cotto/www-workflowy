@@ -7,6 +7,9 @@ use Data::Dumper;
 use JSON;
 use Data::DPath qw/dpath/;
 use URL::Encode qw/url_encode/;
+use DateTime;
+use Date::Parse;
+use POSIX;
 
 
 my $username = 'test';
@@ -29,7 +32,7 @@ say "editing item";
 #  }, $wf_tree,
 #);
 say "trying to create a child";
-create_item($ua, '5a4d3097-72d0-9029-ee63-7653c0624343', {name => "child creation test"}, $wf_tree);
+create_item($ua, '3fa535e1-06b3-4406-0e75-4ddba7c9d606', {name => "child creation test number the fourth", priority => 2}, $wf_tree);
 
 say "loggging out";
 log_out($ua); exit;
@@ -163,6 +166,7 @@ sub get_wf_tree {
     $wf_tree->{ lc $+{var_name} } = $json->decode( $+{var_json} );
     #say "assigned $+{var_name} the value $+{var_json}";
   }
+  $wf_tree->{start_time_in_ms} = floor( 1000 * str2time($wf_tree->{client_id}) );
   return $wf_tree;
 }
 
@@ -180,14 +184,6 @@ sub edit_item {
   $req->content_type('application/x-www-form-urlencoded');
   my $client_id = $wf_tree->{client_id};
 
-  my $edit_data = {
-    projectid => $item_data->{id},
-    name => $item_data->{name},
-  };
-
-  if (exists $item_data->{note}) {
-    $edit_data->{description} = $item_data->{note};
-  }
 
   # build the push/poll data
   my $push_poll_data = [
@@ -196,7 +192,11 @@ sub edit_item {
       operations => [
         {
           type => 'edit',
-          data => $edit_data,
+          data => {
+            projectid => $item_data->{id},
+            name => $item_data->{name},
+            description => $item_data->{note} // '',
+          },
           
           # The wf web client sends this, but it doesn't appear to be strictly necessary.
           #undo_data => {
@@ -205,7 +205,7 @@ sub edit_item {
           #},
           
           # This also appears to be optional.
-          # client_timestamp => '?????',
+          client_timestamp => _client_timestamp($wf_tree),
         },
       ],
     },
@@ -246,25 +246,26 @@ sub create_item {
         {
           type => 'create',
           data => {
-             projectid => $parent_id,
-             parentid => $child_id,
-             priority => 65,
+             projectid => $child_id,
+             parentid => $parent_id,
+             # priority determines the order in which this item is listed among its siblings
+             priority => $child_data->{priority} // 999,
           },
-#          "undo_data": {},
-#          "client_timestamp": 293140
+          undo_data => {},
+          client_timestamp => _client_timestamp($wf_tree),
         },
         {
           type => "edit",
           data => {
             projectid => $child_id,
             name => $child_data->{name},
+            description => $child_data->{note} // '',
           },
-#          "undo_data": {
-#            "previous_last_modified": 293140,
-#            "previous_name": ""
-#          },
-#          "client_timestamp": 293140
-          
+          undo_data => {
+            previous_last_modified => 293140,
+            previous_name => "",
+          },
+          client_timestamp => _client_timestamp($wf_tree),
         },
       ],
     },
@@ -285,6 +286,27 @@ sub create_item {
 }
 
 
+=item _client_timestamp($wf_tree)
+
+Calculate and return the client_timestamp, as expected by workflowy.
+
+=cut
+
+sub _client_timestamp {
+  my ($wf_tree) = @_;
+
+  # client_timestamp is the number of minutes since the current account first
+  # registered with workflowy plus the number of minutes since this client
+  # first connected.  Since this client does all its work less than a minute after
+  # connecting, the second part of the calculation will always be zero.
+  my $mins_since_joined = $wf_tree->{main_project_tree_info}{minutesSinceDateJoined};
+  my $curr_time_in_ms = floor( 1000 * DateTime->now()->epoch() );
+  my $start_time_in_ms = $wf_tree->{start_time_in_ms};
+  my $client_timestamp = $mins_since_joined + floor(($curr_time_in_ms - $start_time_in_ms) / 60_000);
+  return $mins_since_joined;
+}
+
+
 =item _last_transaction_id($ua, $wf_tree) 
 
 Grab the id of the most recent transaction.
@@ -294,6 +316,8 @@ Grab the id of the most recent transaction.
 sub _last_transaction_id {
 
   my ($ua, $wf_tree) = @_;
+
+  # TODO: this data is already in wf_tree under initialMostRecentOperationTransactionId
 
   # TODO: invalidate/update this when an update is made
   state $transaction_id = "";
