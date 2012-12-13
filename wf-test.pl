@@ -19,33 +19,35 @@ unless (log_in($ua, $username, $password)) {
   die "couldn't log in.  sad face.";
 }
 
+say "grabbing tree";
 my $wf_tree = get_wf_tree($ua);
 
-edit_item($ua, {
-    id => '3fa535e1-06b3-4406-0e75-4ddba7c9d606',
-    name => "updated!!!?!!",
-    note => "and now it has a note",
-  }, $wf_tree,
-);
+say "editing item";
+#edit_item($ua, {
+#    id => '5a4d3097-72d0-9029-ee63-7653c0624343',
+#    name => "I've got a lovely bunch of coconuts.",
+#  }, $wf_tree,
+#);
+say "trying to create a child";
+create_item($ua, '5a4d3097-72d0-9029-ee63-7653c0624343', {name => "child creation test"}, $wf_tree);
 
-
-
+say "loggging out";
 log_out($ua); exit;
 
 
 
 
-my $children = $wf_tree ~~ dpath '//rootProjectChildren//nm[ value =~ /#food-log/ ]/..';
-my $date_weights = [];
-
-foreach my $child (@$children) {
-  my $date = $child->{nm};
-  $date =~ s/#food-log //;
-  my $weights = $child ~~ dpath '//nm[ value =~ /^weight/ ]';
-  my $weight = $weights->[0];
-  $weight =~ s/[^0-9.]//g;
-  say "on $date, weight was $weight";
-}
+#my $children = $wf_tree ~~ dpath '//rootProjectChildren//nm[ value =~ /#food-log/ ]/..';
+#my $date_weights = [];
+#
+#foreach my $child (@$children) {
+#  my $date = $child->{nm};
+#  $date =~ s/#food-log //;
+#  my $weights = $child ~~ dpath '//nm[ value =~ /^weight/ ]';
+#  my $weight = $weights->[0];
+#  $weight =~ s/[^0-9.]//g;
+#  say "on $date, weight was $weight";
+#}
 
 # GOAL:
 # * grab the weight info from all #food-log entries
@@ -60,50 +62,6 @@ foreach my $child (@$children) {
 log_out($ua);
 
 
-# creating a new item:
-# [{
-#   "most_recent_operation_transaction_id":"86354089",
-#   "operations":
-#   [{
-#     "type":"create",
-#     "data": {
-#       "projectid":"3fa535e1-06b3-4406-0e75-4ddba7c9d606",
-#       "parentid":"7b06186f-573a-b443-b66a-12bd28b95743",
-#       "priority":1
-#     },
-#     "undo_data":{},
-#     "client_timestamp":1613527
-#   },
-#   {
-#     "type":"move",
-#     "data": {
-#       "projectid":"3fa535e1-06b3-4406-0e75-4ddba7c9d606",
-#       "parentid":"d6e42406-eb99-4b93-b6f0-87dd7eef29ec",
-#       "priority":0
-#     },
-#     "undo_data":{
-#       "previous_parentid":"7b06186f-573a-b443-b66a-12bd28b95743",
-#       "previous_priority":1,
-#       "previous_last_modified":1613527
-#     },
-#     "client_timestamp":1613527
-#   },
-#   {
-#     "type":"edit",
-#     "data": {
-#       "projectid":"3fa535e1-06b3-4406-0e75-4ddba7c9d606",
-#       "name":"a third item??????"
-#     },
-#     "undo_data":{
-#       "previous_last_modified":1613527,
-#       "previous_name":""
-#     },
-#     "client_timestamp":1613527
-#   }],
-#   "project_expansions_delta": {
-#     "d6e42406":true
-#   }
-# }] 
   
 =item rand_string($len)
 
@@ -115,6 +73,19 @@ sub rand_string {
   my $len = shift;
   my $s = join "", map ['0'..'9','A'..'Z','a'..'z']->[rand 62], 1..$len;
   return $s
+}
+
+
+=item _gen_uuid()
+
+Generate a uuid.
+
+=cut
+
+sub _gen_uuid {
+  # 12345678-1234-1234-1234-123456789012
+  # 8922a424-1e51-629c-efee-9e7facb70cce
+  join '-', map { join "", map {['0'..'9','a'..'f']->[rand 16]} 1..$_ } (8, 4, 4, 4, 12);
 }
 
 
@@ -221,7 +192,7 @@ sub edit_item {
   # build the push/poll data
   my $push_poll_data = [
     {
-      most_recent_operation_transaction_id => _last_transaction_id($ua),
+      most_recent_operation_transaction_id => _last_transaction_id($ua, $wf_tree),
       operations => [
         {
           type => 'edit',
@@ -253,8 +224,68 @@ sub edit_item {
 
 }
 
+=item create_item($ua, $parent_id, $child_data, $wf_tree) 
 
-=item _last_transaction_id($ua) 
+Create a child item below the specified parent.
+
+=cut
+
+sub create_item {
+  my ($ua, $parent_id, $child_data, $wf_tree) = @_;
+
+  my $req = HTTP::Request->new(POST => 'https://workflowy.com/push_and_poll');
+  $req->content_type('application/x-www-form-urlencoded');
+  my $client_id = $wf_tree->{client_id};
+  my $child_id = _gen_uuid();
+
+  # build the push/poll data
+  my $push_poll_data = [
+    {
+      most_recent_operation_transaction_id => _last_transaction_id($ua, $wf_tree),
+      operations => [
+        {
+          type => 'create',
+          data => {
+             projectid => $parent_id,
+             parentid => $child_id,
+             priority => 65,
+          },
+#          "undo_data": {},
+#          "client_timestamp": 293140
+        },
+        {
+          type => "edit",
+          data => {
+            projectid => $child_id,
+            name => $child_data->{name},
+          },
+#          "undo_data": {
+#            "previous_last_modified": 293140,
+#            "previous_name": ""
+#          },
+#          "client_timestamp": 293140
+          
+        },
+      ],
+    },
+  ];
+
+  my $push_poll_json = encode_json($push_poll_data);
+
+  my $req_data = join('&',
+    "client_id=$client_id".
+    "client_version=9",
+    "push_poll_id=".rand_string(8),
+    "push_poll_data=$push_poll_json");
+  
+  $req->content($req_data);
+  my $resp = $ua->request($req);
+  say Dumper($resp);
+
+}
+
+
+=item _last_transaction_id($ua, $wf_tree) 
 
 Grab the id of the most recent transaction.
 
@@ -262,7 +293,9 @@ Grab the id of the most recent transaction.
 
 sub _last_transaction_id {
 
-  my ($ua) = @_;
+  my ($ua, $wf_tree) = @_;
+
+  # TODO: invalidate/update this when an update is made
   state $transaction_id = "";
 
   if ($transaction_id ne "") {
