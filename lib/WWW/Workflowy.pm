@@ -254,7 +254,7 @@ Given the id of a valid child, return the id of its immediate parent.
 sub find_parent_id {
   my ($self, $child_id) = @_;
 
-  return $self->parent_map()->{ $child_id };
+  return $self->parent_map->{ $child_id };
 }
 
 
@@ -373,7 +373,7 @@ sub _build_parent_map {
   foreach my $child (@{$self->tree->{main_project_tree_info}{rootProjectChildren}}) {
     my $current_parent = 'root';
     #say Dumper($child);
-    $self->parent_map()->{ $child->{id} } = $current_parent;
+    $self->parent_map->{ $child->{id} } = $current_parent;
     if (exists $child->{ch}) {
       $self->_build_parent_map_rec($child->{id}, $child->{ch});
     }
@@ -392,7 +392,7 @@ sub _build_parent_map_rec {
   my ($self, $parent_id, $children) = @_;
 
   foreach my $child (@$children) {
-    $self->parent_map()->{ $child->{id} } = $parent_id;
+    $self->parent_map->{ $child->{id} } = $parent_id;
     if (exists $child->{ch}) {
       $self->_build_parent_map_rec($child->{id}, $child->{ch});
     }
