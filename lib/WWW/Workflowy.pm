@@ -39,6 +39,11 @@ has 'logged_in' => (
   'predicate' => 'is_logged_in',
 );
 
+has 'parent_map' => (
+  'is' => 'rw',
+  'isa' => 'HashRef',
+  'default' => sub { {} },
+);
 
 =item log_in($username, $password)
 
@@ -249,7 +254,7 @@ Given the id of a valid child, return the id of its immediate parent.
 sub find_parent_id {
   my ($self, $child_id) = @_;
 
-  return $self->tree->{parent_map}{ $child_id };
+  return $self->parent_map()->{ $child_id };
 }
 
 
@@ -363,18 +368,17 @@ Calculate and cache information on each item's parents.
 sub _build_parent_map {
   my ($self) = @_;
 
-  $self->tree->{parent_map} = {};
   #say Dumper($self->tree);
 
   foreach my $child (@{$self->tree->{main_project_tree_info}{rootProjectChildren}}) {
     my $current_parent = 'root';
     #say Dumper($child);
-    $self->tree->{parent_map}{ $child->{id} } = $current_parent;
+    $self->parent_map()->{ $child->{id} } = $current_parent;
     if (exists $child->{ch}) {
       $self->_build_parent_map_rec($child->{id}, $child->{ch});
     }
   }
-  #say Dumper($self->tree->{parent_map});
+  #say Dumper($self->parent_map);
 }
 
 
@@ -388,7 +392,7 @@ sub _build_parent_map_rec {
   my ($self, $parent_id, $children) = @_;
 
   foreach my $child (@$children) {
-    $self->tree->{parent_map}{ $child->{id} } = $parent_id;
+    $self->parent_map()->{ $child->{id} } = $parent_id;
     if (exists $child->{ch}) {
       $self->_build_parent_map_rec($child->{id}, $child->{ch});
     }
