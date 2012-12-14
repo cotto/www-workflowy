@@ -26,17 +26,6 @@ say "grabbing tree...";
 $wf->get_tree();
 say "done grabbing tree";
 
-#say "editing item";
-#edit_item($ua, {
-#    id => '5a4d3097-72d0-9029-ee63-7653c0624343',
-#    name => "I've got a lovely bunch of coconuts.",
-#  }, $wf_tree,
-#);
-#say "trying to create a child";
-#create_item($ua, '3fa535e1-06b3-4406-0e75-4ddba7c9d606', {name => "child creation test number the fourth", priority => 2}, $wf_tree);
-
-#log_out($ua); exit;
-
 
 if (1) {
   my $children = $wf->tree ~~ dpath '//rootProjectChildren//nm[ value =~ /#food-log/ ]/..';
@@ -53,7 +42,6 @@ if (1) {
     $weight =~ s/[^0-9.]//g;
 
     $ema->add($weight);
-    say "found weight: '$weight'";
     my $avg = sprintf("%.2f", $ema->ema);
     my $delta_ema = sprintf("%.2f", $weight - $avg);
     my $msg = "stats: ewma = $avg, d_ewma = $delta_ema";
@@ -78,20 +66,6 @@ if (1) {
     $wf->edit_item({id => $stats_id, name => $msg});
   }
 }
-
-
-#my $parent_id = find_parent_id('de08c6ae-07d9-3043-bce3-a9680aa04e7e', $wf_tree);
-#say "parent is $parent_id";
-
-# GOAL:
-# * grab the weight info from all #food-log entries
-# * mangle it into a nice list
-# * for each day
-#   * create a stats item if needed
-#   * calculate the 10-day exponentially smoothed average (and whatever else seems expedient)
-#   * get the uuid of the stats item
-#   * update the contents of the stats item
-
 
 say "logging out";
 $wf->log_out();
