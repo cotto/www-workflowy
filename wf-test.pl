@@ -1,13 +1,9 @@
 #! env perl
 
 use strict;
-use feature qw/say state/;
-use LWP;
+use feature qw/say/;
 use Data::Dumper;
-use JSON;
 use Data::DPath qw/dpath/;
-use URL::Encode qw/url_encode/;
-use DateTime;
 use Math::EMA;
 
 use lib qw/lib/;
