@@ -40,15 +40,28 @@ my $wf_tree = get_wf_tree($ua);
 if (1) {
 my $children = $wf_tree ~~ dpath '//rootProjectChildren//nm[ value =~ /#food-log/ ]/..';
 my $date_weights = [];
+my $wf_list = $wf_tree->{main_project_tree_info}{rootProjectChildren};
 
-foreach my $child (@$children) {
-  my $date = $child->{nm};
+foreach my $child_tree (@$children) {
+  my $date = $child_tree->{nm};
   $date =~ s/#food-log //;
-  my $weights = $child ~~ dpath '//nm[ value =~ /^weight/ ]';
+  my $weights = $child_tree ~~ dpath '//nm[ value =~ /^weight/ ]';
   my $weight = $weights->[0];
   $weight =~ s/[^0-9.]//g;
-  my $parent_id = find_parent_id($child->{id}, $wf_tree);
-  say "on $date, weight was $weight, parent is $parent_id";
+  say "on $date, weight was $weight";
+  my $stats_item = $child_tree ~~ dpath "/ch//nm[value =~ /stats/]/..";
+  my $stats_id;
+  if (scalar(@$stats_item)) {
+    say "found stats item; id is $stats_item->[0]{id}";
+    $stats_id = $stats_item->[0]{id};
+  }
+  else {
+    say "no stats item: creating one";
+    $stats_id = create_item($ua, $child_tree->{id}, {name => "stats", priority => 999}, $wf_tree);
+  }
+  say "updating stats";
+  my $stat = $weight * 999;
+  edit_item($ua, {id => $stats_id, name => "#stats: 999 * weight is $stat "}, $wf_tree);
 }
 }
 
@@ -286,7 +299,7 @@ sub edit_item {
 
 =item create_item($ua, $parent_id, $child_data, $wf_tree) 
 
-Create a child item below the specified parent.
+Create a child item below the specified parent and return the id of the new child.
 
 =cut
 
@@ -341,6 +354,7 @@ sub create_item {
   
   $req->content($req_data);
   my $resp = $ua->request($req);
+  return $child_id;
 }
 
 
