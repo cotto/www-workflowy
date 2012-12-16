@@ -45,6 +45,24 @@ has 'parent_map' => (
   'default' => sub { {} },
 );
 
+
+sub BUILD {
+  my ($self, $args) = @_;
+
+  if (%$args) {
+    $self->log_in($args->{username}, $args->{password});
+    $self->get_tree();
+  }
+}
+
+sub DEMOLISH {
+  my ($self) = @_;
+  if ($self->logged_in) {
+    $self->log_out();
+    $self->logged_in(0);
+  }
+}
+
 =item log_in($username, $password)
 
 Log in to a Workflowy account.
@@ -80,7 +98,7 @@ sub log_in {
 
 =item log_out($ua)
 
-Be polite and log out.
+Be polite and log out.  This method is called automatically on destruction.
 
 =cut
 
