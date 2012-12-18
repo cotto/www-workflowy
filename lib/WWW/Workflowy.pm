@@ -232,7 +232,7 @@ sub edit_item {
   my $req_data = join('&',
     "client_id=$client_id".
     "client_version=9",
-    "push_poll_id=".$self->_rand_string(8),
+    "push_poll_id=".$self->_gen_push_poll_id(8),
     "push_poll_data=$push_poll_json");
 
   $req->content($req_data);
@@ -294,7 +294,7 @@ sub create_item {
   my $req_data = join('&',
     "client_id=$client_id".
     "client_version=9",
-    "push_poll_id=".$self->_rand_string(8),
+    "push_poll_id=".$self->_gen_push_poll_id(8),
     "push_poll_data=$push_poll_json");
 
   $req->content($req_data);
@@ -351,7 +351,7 @@ sub _last_transaction_id {
   my $req_data = join('&',
     "client_id=$client_id".
     "client_version=9",
-    "push_poll_id=".$self->_rand_string(8),
+    "push_poll_id=".$self->_gen_push_poll_id(8),
     "push_poll_data=$push_poll_json");
 
   $req->content($req_data);
@@ -392,13 +392,13 @@ sub _client_timestamp {
 
 
 
-=item _rand_string($len)
+=item _gen_push_poll_id($len)
 
 Generate a random alnum string of $len characters.
 
 =cut
 
-sub _rand_string {
+sub _gen_push_poll_id{
   my ($self, $len) = @_;
   join "", map {('0'..'9','A'..'Z','a'..'z')[rand 62]} 1..$len;
 }
