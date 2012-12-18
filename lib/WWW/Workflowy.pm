@@ -67,6 +67,7 @@ has 'wf_uri' => (
 #     non-paying users
 #   * paying users get 1M items/month, so that's a thing
 # * proper readme, documentation and examples
+# * version number
 # * move wf-test.pl into a separate repo
 # * think about a persistence layer that syncs w/ wf on init rather than
 #   grabbing the entire tree
