@@ -105,22 +105,27 @@ sub log_in {
 
   my ($self, $username, $password) = @_;
 
-  # will return 200 on failed login, 302 on success
+  # Workflowy will return 200 on failed login and 302 on success.  This would
+  # be more of a wtf if the API were designed for external users, but its only
+  # intended use is via the web frontend, so it is what it is.
   my $req = HTTP::Request->new(POST => $self->wf_uri.'/accounts/login/');
   $req->content_type('application/x-www-form-urlencoded');
   $req->content("username=$username&password=$password");
   my $resp = $self->ua->request($req);
 
+  # 200 means that the login definitely failed.
   if ($resp->code == 200) {
-    return 0;
+    die __PACKAGE__.": login attempt failed for user '$username'";
   }
 
+  # 302 means that the login definitely succeeded.
   if ($resp->code == 302) {
     $self->logged_in(1);
-    return 1;
+    return;
   }
 
-  return 0;
+  # Anything else probably means that the login failed.
+  die __PACKAGE__.": login attempt failed for user '$username'";
 }
 
 
@@ -142,19 +147,21 @@ sub log_out {
 
 =item get_tree($ua)
 
-Retrieve the current state of this user's Workflowy tree.
+Retrieve the current state of this user's Workflowy tree.  Since this is the
+primary method of retrieving data from Workflowy, you'll need to call this
+method before attempting to manipulate any Workflowy data.
 
 =cut
 
 sub get_tree {
   my ($self) = @_;
 
-  die "must be logged in before calling get_tree" unless $self->is_logged_in;
+  die __PACKAGE__." must be logged in before calling get_tree" unless $self->is_logged_in;
 
   my $req = HTTP::Request->new(GET => $self->wf_uri.'/get_project_tree_data');
   my $resp = $self->ua->request($req);
   unless ($resp->is_success) {
-    return 0;
+    die __PACKAGE__." couldn't retrieve tree: ".$resp->status_line;
   }
 
   my $contents = $resp->decoded_content;
@@ -196,12 +203,11 @@ Modify the name and/or notes of an existing item.
 sub edit_item {
   my ($self, $item_data) = @_;
   
-  die "must be logged in before editing an item" unless $self->is_logged_in;
+  die __PACKAGE__." must be logged in before editing an item" unless $self->is_logged_in;
 
   my $req = HTTP::Request->new(POST => $self->wf_uri.'/push_and_poll');
   $req->content_type('application/x-www-form-urlencoded');
   my $client_id = $self->config->{client_id};
-
 
   # build the push/poll data
   my $push_poll_data = [
@@ -237,7 +243,11 @@ sub edit_item {
     "push_poll_data=$push_poll_json");
 
   $req->content($req_data);
-  $self->ua->request($req);
+  my $resp = $self->ua->request($req);
+
+  unless ($resp->is_success) {
+    die __PACKAGE__." couldn't update item: ".$resp->status_line;
+  }
 }
 
 
@@ -250,7 +260,7 @@ Create a child item below the specified parent and return the id of the new chil
 sub create_item {
   my ($self, $parent_id, $child_data) = @_;
 
-  die "must be logged in before calling create_item" unless $self->is_logged_in;
+  die __PACKAGE__." must be logged in before calling create_item" unless $self->is_logged_in;
 
   my $req = HTTP::Request->new(POST => $self->wf_uri.'/push_and_poll');
   $req->content_type('application/x-www-form-urlencoded');
@@ -300,6 +310,9 @@ sub create_item {
 
   $req->content($req_data);
   my $resp = $self->ua->request($req);
+  unless ($resp->is_success) {
+    die __PACKAGE__." couldn't create new item: ".$resp->status_line;
+  }
   return $child_id;
 }
 
@@ -357,6 +370,9 @@ sub _last_transaction_id {
 
   $req->content($req_data);
   my $resp = $self->ua->request($req);
+  unless ($resp->is_success) {
+    die __PACKAGE__." couldn't get most recent transaction id: ".$resp->status_line;
+  }
   my $wf_json = $resp->decoded_content();
   $self->last_transaction_id(decode_json($wf_json)->{results}[0]{new_most_recent_operation_transaction_id});
   return $self->last_transaction_id;
