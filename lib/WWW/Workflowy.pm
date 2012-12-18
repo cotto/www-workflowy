@@ -111,18 +111,14 @@ sub log_in {
   my $resp = $self->ua->request($req);
 
   if ($resp->code == 200) {
-    #say "failed to log in";
     return 0;
   }
 
   if ($resp->code == 302) {
-    #say "login successful";
     $self->logged_in(1);
     return 1;
   }
 
-  #say "not sure what happened";
-  #say Dumper($resp);
   return 0;
 }
 
@@ -431,17 +427,13 @@ Calculate and cache information on each item's parents.
 sub _build_parent_map {
   my ($self) = @_;
 
-  #say Dumper($self->tree);
-
   foreach my $child (@{$self->tree}) {
     my $current_parent = 'root';
-    #say Dumper($child);
     $self->parent_map->{ $child->{id} } = $current_parent;
     if (exists $child->{ch}) {
       $self->_build_parent_map_rec($child->{id}, $child->{ch});
     }
   }
-  #say Dumper($self->parent_map);
 }
 
 
