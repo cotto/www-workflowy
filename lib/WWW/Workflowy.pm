@@ -22,6 +22,12 @@ has 'ua' => (
 );
 
 has 'tree' => (
+  'is' => 'rw',
+  'isa' => 'ArrayRef',
+  'default' => sub { [] },
+);
+
+has 'config' => (
   'is' => 'ro',
   'isa' => 'HashRef',
   'default' => sub { {} },
@@ -43,6 +49,12 @@ has 'parent_map' => (
   'is' => 'rw',
   'isa' => 'HashRef',
   'default' => sub { {} },
+);
+
+has 'wf_uri' => (
+  'is' => 'ro',
+  'isa' => 'Str',
+  'default' => sub { 'https://workflowy.com' },
 );
 
 
@@ -74,7 +86,7 @@ sub log_in {
   my ($self, $username, $password) = @_;
 
   # will return 200 on failed login, 302 on success
-  my $req = HTTP::Request->new(POST => 'https://workflowy.com/accounts/login/');
+  my $req = HTTP::Request->new(POST => $self->wf_uri.'/accounts/login/');
   $req->content_type('application/x-www-form-urlencoded');
   $req->content("username=$username&password=$password");
   my $resp = $self->ua->request($req);
@@ -92,6 +104,7 @@ sub log_in {
 
   #say "not sure what happened";
   #say Dumper($resp);
+  return 0;
 }
 
 
@@ -105,7 +118,7 @@ Be polite and log out.  This method is called automatically on destruction.
 sub log_out {
   my ($self) = @_;
 
-  my $req = HTTP::Request->new(GET => 'https://workflowy.com/offline_logout?so_long_and_thanks_for_all_the_fish');
+  my $req = HTTP::Request->new(GET => $self->wf_uri.'/offline_logout?so_long_and_thanks_for_all_the_fish');
   $self->ua->request($req);
   $self->clear_logged_in;
 }
@@ -122,7 +135,7 @@ sub get_tree {
 
   die "must be logged in before calling get_tree" unless $self->is_logged_in;
 
-  my $req = HTTP::Request->new(GET => 'https://workflowy.com/get_project_tree_data');
+  my $req = HTTP::Request->new(GET => $self->wf_uri.'/get_project_tree_data');
   my $resp = $self->ua->request($req);
   unless ($resp->is_success) {
     return 0;
@@ -137,10 +150,23 @@ sub get_tree {
   foreach my $line (split /\n/, $contents) {
     next unless $line =~ m/^var/ && $line =~ m/;$/;
     $line =~ m/^var (?<var_name>[A-Z_]+) = (?<var_json>.*);$/;
-    $self->tree->{ lc $+{var_name} } = $json->decode( $+{var_json} );
-    #say "assigned $+{var_name} the value $+{var_json}";
+    my $lc_name = lc $+{var_name};
+    my $var_contents = $json->decode($+{var_json});
+
+    # consolidate all config info into $self->config and put the list structure
+    # in $self->tree
+    if ($lc_name eq 'main_project_tree_info') {
+      $self->tree($var_contents->{rootProjectChildren}); 
+      delete $var_contents->{rootProjectChildren};
+      foreach my $key (keys $var_contents) {
+        $self->config->{$key} = $var_contents->{$key};
+      }
+    }
+    else {
+      $self->config->{ lc $+{var_name} } = $var_contents;
+    }
   }
-  $self->tree->{start_time_in_ms} = floor( 1000 * str2time($self->tree->{client_id}) );
+  $self->config->{start_time_in_ms} = floor( 1000 * str2time($self->config->{client_id}) );
   $self->_build_parent_map();
 }
 
@@ -156,9 +182,9 @@ sub edit_item {
   
   die "must be logged in before editing an item" unless $self->is_logged_in;
 
-  my $req = HTTP::Request->new(POST => 'https://workflowy.com/push_and_poll');
+  my $req = HTTP::Request->new(POST => $self->wf_uri.'/push_and_poll');
   $req->content_type('application/x-www-form-urlencoded');
-  my $client_id = $self->tree->{client_id};
+  my $client_id = $self->config->{client_id};
 
 
   # build the push/poll data
@@ -210,9 +236,9 @@ sub create_item {
 
   die "must be logged in before calling create_item" unless $self->is_logged_in;
 
-  my $req = HTTP::Request->new(POST => 'https://workflowy.com/push_and_poll');
+  my $req = HTTP::Request->new(POST => $self->wf_uri.'/push_and_poll');
   $req->content_type('application/x-www-form-urlencoded');
-  my $client_id = $self->tree->{client_id};
+  my $client_id = $self->config->{client_id};
   my $child_id = $self->_gen_uuid();
 
   # build the push/poll data
@@ -290,9 +316,9 @@ sub _last_transaction_id {
   # TODO: this data is already in the tree under initialMostRecentOperationTransactionId
   # TODO: invalidate/update this when an update is made
   
-  my $req = HTTP::Request->new(POST => 'https://workflowy.com/push_and_poll');
+  my $req = HTTP::Request->new(POST => $self->wf_uri.'/push_and_poll');
   $req->content_type('application/x-www-form-urlencoded');
-  my $client_id = $self->tree->{client_id};
+  my $client_id = $self->config->{client_id};
 
   my $push_poll_data = [
     {
@@ -338,7 +364,7 @@ sub _client_timestamp {
   # registered with workflowy plus the number of minutes since this client
   # first connected.  Since this client does all its work less than a minute after
   # connecting, the second part of the calculation will always be zero.
-  my $mins_since_joined = $self->tree->{main_project_tree_info}{minutesSinceDateJoined};
+  my $mins_since_joined = $self->config->{minutesSinceDateJoined};
 
   # The rest of these values will be needed if this client ever connects for
   # more than one minute and wants to continue to return valid timestamps.
@@ -388,7 +414,7 @@ sub _build_parent_map {
 
   #say Dumper($self->tree);
 
-  foreach my $child (@{$self->tree->{main_project_tree_info}{rootProjectChildren}}) {
+  foreach my $child (@{$self->tree}) {
     my $current_parent = 'root';
     #say Dumper($child);
     $self->parent_map->{ $child->{id} } = $current_parent;
