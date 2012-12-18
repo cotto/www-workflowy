@@ -57,6 +57,25 @@ has 'wf_uri' => (
   'default' => sub { 'https://workflowy.com' },
 );
 
+# TODO:
+# * throw exceptions on errors
+# * look for some moose magic to deal with BUILD args
+# * check out a few other Moose API modules to see if I'm missing anything
+#   important
+# * tests (basic, ro and full
+#   * need to be cognizant of the fact that item creation is rate-limited for
+#     non-paying users
+#   * paying users get 1M items/month, so that's a thing
+# * proper readme, documentation and examples
+# * move wf-test.pl into a separate repo
+# * think about a persistence layer that syncs w/ wf on init rather than
+#   grabbing the entire tree
+# * check the client version, make sure that if it changes, there's a very
+#   good chance that something will break
+# * do something better than ghetto parsing of js, or at least make it less
+#   ghetto
+# * make the client_timestamp calculation less horribly wrong
+
 
 sub BUILD {
   my ($self, $args) = @_;
