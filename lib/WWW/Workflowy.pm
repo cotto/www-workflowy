@@ -420,6 +420,6 @@ sub _build_parent_map_rec {
 
 
 
-
+__PACKAGE__->meta->make_immutable;
 
 1;
