@@ -1,0 +1,135 @@
+NAME
+    WWW::Workflowy - an unofficial API for Workflowy
+
+VERSION
+    version 0.1
+
+SYNOPSIS
+      use WWW::Workflowy;
+
+      # manually log in and update the tree
+      my $wfl = WWW::Workflowy->new();
+      $wfl->log_in('workflowy_user@example.com', 'workflowy_password');
+      $wfl->get_tree();
+
+      # same as above but with less code
+      my $wfl = WWW::Workflowy->new( username => 'workflowy_user@example.com', password => 'workflowy_password');
+
+      # all list data lives in $wfl->tree
+      use Data::Dumper;
+      print Dumper($wfl->tree);
+
+      # create a new item
+      my $parent_id = ...; # grab the id of a parent from $wfl->tree
+      my $child_data = {
+        name => 'This is a new Workflowy list item!',
+        note => 'This item has a note', # optional
+        priority => 999, # put this item below all its siblings
+      };
+      $wfl->create_item( $parent_id, $child_data);
+
+      # update an item
+      my $item_data = {
+        id => ..., # grab this value from $wfl->tree
+        name => "This item has been edited."
+        note => "This note has been edited too.",
+      }
+      $wfl->update_item($item_data);
+
+
+      # log out (happens automatically during object destruction)
+      $wfl->log_out();
+
+DESCRIPTION
+      This module provides an unoffical Perl interface for retrieving and manipulating the data stored in a Workflowy list.
+
+      Note that Workflowy do not currently attempt to maintain a stable API, so it is possible that this module could break without notice.  The maintainer of this module uses it on a daily basis and will try to keep it running, but using it for anything mission-critical is ill-advised.
+
+ATTRIBUTES
+  ua
+    the user agent used to access Workflowy
+
+  tree
+    This is a read-only ArrayRef that contains all items in the workflowy
+    list. To modify the tree, use edit_item or create_item. Each item has
+    the following format:
+
+    *   id - a UUID that identifies this item
+
+    *   nm - the name of this item
+
+    *   no - the note attached to this item (optional)
+
+    *   ch - an ArrayRef of this item's children
+
+  config
+    stores configuration information from Workflowy
+
+  last_transaction_id
+    stores the id of the most recent transaction
+
+  logged_in
+    true if this instance has successfully logged in and hasn't logged out
+    yet
+
+  parent_map
+    internal cache that maps child ids to parent ids
+
+  wf_uri
+    the url where Workflowy (or some hypothetical compatible service) lives
+
+METHODS
+  log_in($username, $password)
+    Log in to a Workflowy account.
+
+  log_out($ua)
+    Be polite and log out. This method is called automatically on
+    destruction, so you probably don't need to use it explicitly unless
+    you're doing something unusual.
+
+  get_tree($ua)
+    Retrieve the current state of this user's Workflowy tree. Since this is
+    the primary method of retrieving data from Workflowy, you'll need to
+    call this method before attempting to manipulate any Workflowy data.
+
+  update_item($item_data)
+    Modify the name and/or notes of an existing item.
+
+  create_item($parent_id, $child_data)
+    Create a child item below the specified parent and return the id of the
+    new child.
+
+  find_parent_id($child_id)
+    Given the id of a valid child, return the id of its immediate parent.
+
+  _last_transaction_id
+    Return the id of the most recent transaction.
+
+  _client_timestamp($wf_tree)
+    Calculate and return the client_timestamp, as expected by workflowy.
+    Omitting this field from a request appears to have no effect, but I
+    implemented it while debugging something else and don't see any reason
+    not to keep the code around.
+
+  _gen_push_poll_id($len)
+    Generate a random alnum string of $len characters.
+
+  _gen_uuid
+    Generate a uuid using rand as the source of entropy.
+
+  _build_parent_map
+    Calculate and cache information on each item's parents.
+
+  _build_parent_map_rec($children, $parent_id)
+    Helper for _build_parent_map.
+
+AUTHOR
+    Christoph Otto <christoph_cpan@mksig.org>
+
+COPYRIGHT AND LICENSE
+    This software is copyright (c) 2012 by Christoph Otto
+    <christoph_cpan@mksig.org>.
+
+    This is free software; you can redistribute it and/or modify it under
+    the same terms as the Perl 5 programming language system itself.
+
