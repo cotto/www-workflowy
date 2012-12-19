@@ -480,9 +480,6 @@ sub _last_transaction_id {
   return $self->last_transaction_id;
 }
 
-
-
-
 =method _client_timestamp($wf_tree)
 
 Calculate and return the client_timestamp, as expected by workflowy.  Omitting
