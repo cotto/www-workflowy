@@ -194,13 +194,13 @@ sub get_tree {
 }
 
 
-=item edit_item($item_data) 
+=item update_item($item_data) 
 
 Modify the name and/or notes of an existing item.
 
 =cut
 
-sub edit_item {
+sub update_item {
   my ($self, $item_data) = @_;
   
   die __PACKAGE__." must be logged in before editing an item" unless $self->is_logged_in;
