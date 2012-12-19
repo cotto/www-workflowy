@@ -458,7 +458,7 @@ sub _last_transaction_id {
 
   my $req_data = join('&',
     "client_id=$client_id".
-    "client_version=".$self-client_version(),
+    "client_version=".$self->client_version(),
     "push_poll_id=".$self->_gen_push_poll_id(8),
     "push_poll_data=$push_poll_json");
 
