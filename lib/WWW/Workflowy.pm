@@ -1,5 +1,8 @@
 package WWW::Workflowy;
 
+# ABSTRACT: an unofficial API for Workflowy
+use strict;
+use warnings;
 use Moose;
 
 use HTTP::Request;
@@ -8,10 +11,60 @@ use Date::Parse;
 use POSIX;
 use JSON;
 
+=head1 SYNOPSIS
+
+  use WWW::Workflowy;
+
+  # manually log in and update the tree
+  my $wfl = WWW::Workflowy->new();
+  $wfl->log_in('workflowy_user@example.com', 'workflowy_password');
+  $wfl->get_tree();
+
+  # same as above but with less code
+  my $wfl = WWW::Workflowy->new( username => 'workflowy_user@example.com', password => 'workflowy_password');
+
+  # all list data lives in $wfl->tree
+  use Data::Dumper;
+  print Dumper($wfl->tree);
+
+  # create a new item
+  my $parent_id = ...; # grab the id of a parent from $wfl->tree
+  my $child_data = {
+    name => 'This is a new Workflowy list item!',
+    note => 'This item has a note', # optional
+    priority => 999, # put this item below all its siblings
+  };
+  $wfl->create_item( $parent_id, $child_data);
+
+  # update an item
+  my $item_data = {
+    id => ..., # grab this value from $wfl->tree
+    name => "This item has been edited."
+    note => "This note has been edited too.",
+  }
+  $wfl->update_item($item_data);
+
+
+  # log out (happens automatically during object destruction)
+  $wfl->log_out();
+
+=head1 DESCRIPTION
+
+  This module provides an unoffical Perl interface for retrieving and manipulating the data stored in a Workflowy list.
+
+  Note that Workflowy do not currently attempt to maintain a stable API, so it is possible that this module could break without notice.  The maintainer of this module uses it on a daily basis and will try to keep it running, but using it for anything mission-critical is ill-advised.
+
+=cut
+
+
+=attr ua
+
+the user agent used to access Workflowy
+
+=cut
+
 has 'ua' => (
   'is' => 'ro',
-  # make this private
-  'init_arg' => undef,
   'isa' => 'LWP::UserAgent',
   'default' => sub {
     LWP::UserAgent->new(
@@ -21,11 +74,35 @@ has 'ua' => (
   },
 );
 
+=attr tree
+
+This is a read-only ArrayRef that contains all items in the workflowy list.  To modify the tree, use edit_item or create_item.  Each item has the following format:
+
+=over 4
+
+=item * id - a UUID that identifies this item
+
+=item * nm - the name of this item
+
+=item * no - the note attached to this item (optional)
+
+=item * ch - an ArrayRef of this item's children
+
+=back
+
+=cut
+
 has 'tree' => (
   'is' => 'rw',
   'isa' => 'ArrayRef',
   'default' => sub { [] },
 );
+
+=attr config
+
+stores configuration information from Workflowy
+
+=cut
 
 has 'config' => (
   'is' => 'ro',
@@ -33,10 +110,22 @@ has 'config' => (
   'default' => sub { {} },
 );
 
+=attr last_transaction_id
+
+stores the id of the most recent transaction
+
+=cut
+
 has 'last_transaction_id' => (
   'is' => 'rw',
   'isa' => 'Int',
-); 
+);
+
+=attr logged_in
+
+true if this instance has successfully logged in and hasn't logged out yet
+
+=cut
 
 has 'logged_in' => (
   'is'        => 'rw',
@@ -45,11 +134,23 @@ has 'logged_in' => (
   'predicate' => 'is_logged_in',
 );
 
+=attr parent_map
+
+internal cache that maps child ids to parent ids
+
+=cut
+
 has 'parent_map' => (
   'is' => 'rw',
   'isa' => 'HashRef',
   'default' => sub { {} },
 );
+
+=attr wf_uri
+
+the url where Workflowy (or some hypothetical compatible service) lives
+
+=cut
 
 has 'wf_uri' => (
   'is' => 'ro',
@@ -78,6 +179,7 @@ has 'wf_uri' => (
 # * make the client_timestamp calculation less horribly wrong
 
 
+
 sub BUILD {
   my ($self, $args) = @_;
 
@@ -95,7 +197,7 @@ sub DEMOLISH {
   }
 }
 
-=item log_in($username, $password)
+=method log_in($username, $password)
 
 Log in to a Workflowy account.
 
@@ -130,9 +232,9 @@ sub log_in {
 
 
 
-=item log_out($ua)
+=method log_out($ua)
 
-Be polite and log out.  This method is called automatically on destruction.
+Be polite and log out.  This method is called automatically on destruction, so you probably don't need to use it explicitly unless you're doing something unusual.
 
 =cut
 
@@ -145,7 +247,7 @@ sub log_out {
 }
 
 
-=item get_tree($ua)
+=method get_tree($ua)
 
 Retrieve the current state of this user's Workflowy tree.  Since this is the
 primary method of retrieving data from Workflowy, you'll need to call this
@@ -194,7 +296,7 @@ sub get_tree {
 }
 
 
-=item update_item($item_data) 
+=method update_item($item_data) 
 
 Modify the name and/or notes of an existing item.
 
@@ -251,7 +353,7 @@ sub update_item {
 }
 
 
-=item create_item($parent_id, $child_data) 
+=method create_item($parent_id, $child_data) 
 
 Create a child item below the specified parent and return the id of the new child.
 
@@ -318,7 +420,7 @@ sub create_item {
 
 
 
-=item find_parent_id($child_id)
+=method find_parent_id($child_id)
 
 Given the id of a valid child, return the id of its immediate parent.
 
@@ -332,7 +434,7 @@ sub find_parent_id {
 
 
 
-=item _last_transaction_id() 
+=method _last_transaction_id() 
 
 Return the id of the most recent transaction.
 
@@ -381,7 +483,7 @@ sub _last_transaction_id {
 
 
 
-=item _client_timestamp($wf_tree)
+=method _client_timestamp($wf_tree)
 
 Calculate and return the client_timestamp, as expected by workflowy.  Omitting
 this field from a request appears to have no effect, but I implemented it while
@@ -409,7 +511,7 @@ sub _client_timestamp {
 
 
 
-=item _gen_push_poll_id($len)
+=method _gen_push_poll_id($len)
 
 Generate a random alnum string of $len characters.
 
@@ -420,7 +522,7 @@ sub _gen_push_poll_id{
   join "", map {('0'..'9','A'..'Z','a'..'z')[rand 62]} 1..$len;
 }
 
-=item _gen_uuid()
+=method _gen_uuid()
 
 Generate a uuid using rand as the source of entropy.
 
@@ -435,7 +537,7 @@ sub _gen_uuid {
             
 
 
-=item _build_parent_map()
+=method _build_parent_map
 
 Calculate and cache information on each item's parents.
 
@@ -454,7 +556,7 @@ sub _build_parent_map {
 }
 
 
-=item _build_parent_map_rec($children, $parent_id)
+=method _build_parent_map_rec($children, $parent_id)
 
 Helper for _build_parent_map.
 
