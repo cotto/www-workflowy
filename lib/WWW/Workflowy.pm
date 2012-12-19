@@ -281,7 +281,7 @@ sub get_tree {
     # consolidate all config info into $self->config and put the list structure
     # in $self->tree
     if ($lc_name eq 'main_project_tree_info') {
-      $self->tree($var_contents->{rootProjectChildren}); 
+      $self->tree($var_contents->{rootProjectChildren});
       delete $var_contents->{rootProjectChildren};
       foreach my $key (keys $var_contents) {
         $self->config->{$key} = $var_contents->{$key};
@@ -296,7 +296,7 @@ sub get_tree {
 }
 
 
-=method update_item($item_data) 
+=method update_item($item_data)
 
 Modify the name and/or notes of an existing item.
 
@@ -304,7 +304,7 @@ Modify the name and/or notes of an existing item.
 
 sub update_item {
   my ($self, $item_data) = @_;
-  
+
   die __PACKAGE__." must be logged in before editing an item" unless $self->is_logged_in;
 
   my $req = HTTP::Request->new(POST => $self->wf_uri.'/push_and_poll');
@@ -313,10 +313,10 @@ sub update_item {
 
   # build the push/poll data
   my $push_poll_data = [
-    { 
+    {
       most_recent_operation_transaction_id => $self->_last_transaction_id(),
       operations => [
-        { 
+        {
           type => 'edit',
           data => {
             projectid => $item_data->{id},
@@ -353,7 +353,7 @@ sub update_item {
 }
 
 
-=method create_item($parent_id, $child_data) 
+=method create_item($parent_id, $child_data)
 
 Create a child item below the specified parent and return the id of the new child.
 
@@ -371,10 +371,10 @@ sub create_item {
 
   # build the push/poll data
   my $push_poll_data = [
-    { 
+    {
       most_recent_operation_transaction_id => $self->_last_transaction_id(),
       operations => [
-        { 
+        {
           type => 'create',
           data => {
              projectid => $child_id,
@@ -434,7 +434,7 @@ sub find_parent_id {
 
 
 
-=method _last_transaction_id() 
+=method _last_transaction_id
 
 Return the id of the most recent transaction.
 
@@ -446,7 +446,7 @@ sub _last_transaction_id {
 
   # TODO: this data is already in the tree under initialMostRecentOperationTransactionId
   # TODO: invalidate/update this when an update is made
-  
+
   my $req = HTTP::Request->new(POST => $self->wf_uri.'/push_and_poll');
   $req->content_type('application/x-www-form-urlencoded');
   my $client_id = $self->config->{client_id};
@@ -507,7 +507,7 @@ sub _client_timestamp {
   #my $client_timestamp = $mins_since_joined + floor(($curr_time_in_ms - $start_time_in_ms) / 60_000);
   return $mins_since_joined;
 }
-      
+
 
 
 
@@ -522,7 +522,7 @@ sub _gen_push_poll_id{
   join "", map {('0'..'9','A'..'Z','a'..'z')[rand 62]} 1..$len;
 }
 
-=method _gen_uuid()
+=method _gen_uuid
 
 Generate a uuid using rand as the source of entropy.
 
@@ -533,8 +533,8 @@ sub _gen_uuid {
   # 8922a424-1e51-629c-efee-9e7facb70cce
   join '-', map { join "", map {('0'..'9','a'..'f')[rand 16]} 1..$_ } qw/8 4 4 4 12/;
 }
-  
-            
+
+
 
 
 =method _build_parent_map
