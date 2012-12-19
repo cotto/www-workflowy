@@ -93,9 +93,9 @@ This is a read-only ArrayRef that contains all items in the workflowy list.  To 
 =cut
 
 has 'tree' => (
-  'is' => 'rw',
-  'isa' => 'ArrayRef',
-  'default' => sub { [] },
+  is => 'rw',
+  isa => 'ArrayRef',
+  default => sub { [] },
 );
 
 =attr config
@@ -105,9 +105,9 @@ stores configuration information from Workflowy
 =cut
 
 has 'config' => (
-  'is' => 'ro',
-  'isa' => 'HashRef',
-  'default' => sub { {} },
+  is => 'ro',
+  isa => 'HashRef',
+  default => sub { {} },
 );
 
 =attr last_transaction_id
@@ -117,8 +117,8 @@ stores the id of the most recent transaction
 =cut
 
 has 'last_transaction_id' => (
-  'is' => 'rw',
-  'isa' => 'Int',
+  is => 'rw',
+  isa => 'Int',
 );
 
 =attr logged_in
@@ -128,10 +128,9 @@ true if this instance has successfully logged in and hasn't logged out yet
 =cut
 
 has 'logged_in' => (
-  'is'        => 'rw',
-  'isa'       => 'Bool',
-  'clearer'   => 'clear_logged_in',
-  'predicate' => 'is_logged_in',
+  is        => 'rw',
+  isa       => 'Bool',
+  default => sub { 0 },
 );
 
 =attr parent_map
@@ -141,9 +140,9 @@ internal cache that maps child ids to parent ids
 =cut
 
 has 'parent_map' => (
-  'is' => 'rw',
-  'isa' => 'HashRef',
-  'default' => sub { {} },
+  is => 'rw',
+  isa => 'HashRef',
+  default => sub { {} },
 );
 
 =attr wf_uri
@@ -153,9 +152,9 @@ the url where Workflowy (or some hypothetical compatible service) lives
 =cut
 
 has 'wf_uri' => (
-  'is' => 'ro',
-  'isa' => 'Str',
-  'default' => sub { 'https://workflowy.com' },
+  is => 'ro',
+  isa => 'Str',
+  default => sub { 'https://workflowy.com' },
 );
 
 
@@ -222,7 +221,7 @@ sub log_out {
 
   my $req = HTTP::Request->new(GET => $self->wf_uri.'/offline_logout?so_long_and_thanks_for_all_the_fish');
   $self->ua->request($req);
-  $self->clear_logged_in;
+  $self->logged_in(0);
 }
 
 
@@ -237,7 +236,7 @@ method before attempting to manipulate any Workflowy data.
 sub get_tree {
   my ($self) = @_;
 
-  die __PACKAGE__." must be logged in before calling get_tree" unless $self->is_logged_in;
+  die __PACKAGE__." must be logged in before calling get_tree" unless $self->logged_in;
 
   my $req = HTTP::Request->new(GET => $self->wf_uri.'/get_project_tree_data');
   my $resp = $self->ua->request($req);
@@ -284,7 +283,7 @@ Modify the name and/or notes of an existing item.
 sub update_item {
   my ($self, $item_data) = @_;
 
-  die __PACKAGE__." must be logged in before editing an item" unless $self->is_logged_in;
+  die __PACKAGE__." must be logged in before editing an item" unless $self->logged_in;
 
   my $req = HTTP::Request->new(POST => $self->wf_uri.'/push_and_poll');
   $req->content_type('application/x-www-form-urlencoded');
@@ -341,7 +340,7 @@ Create a child item below the specified parent and return the id of the new chil
 sub create_item {
   my ($self, $parent_id, $child_data) = @_;
 
-  die __PACKAGE__." must be logged in before calling create_item" unless $self->is_logged_in;
+  die __PACKAGE__." must be logged in before calling create_item" unless $self->logged_in;
 
   my $req = HTTP::Request->new(POST => $self->wf_uri.'/push_and_poll');
   $req->content_type('application/x-www-form-urlencoded');
