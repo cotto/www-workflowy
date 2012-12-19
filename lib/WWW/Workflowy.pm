@@ -84,9 +84,9 @@ This is a read-only ArrayRef that contains all items in the workflowy list.  To 
 
 =item * nm - the name of this item
 
-=item * no - the note attached to this item (optional)
+=item * no - the note attached to this item (only present when used)
 
-=item * ch - an ArrayRef of this item's children
+=item * ch - an ArrayRef of this item's children (only present when used)
 
 =back
 
