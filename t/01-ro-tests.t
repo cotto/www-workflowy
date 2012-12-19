@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 use LWP::Online ':skip_all';
-use Test::More tests => 11;
+use Test::More tests => 12;
 use Test::Exception;
 use WWW::Workflowy;
 
@@ -14,6 +14,8 @@ my $wf_user = $ENV{WORKFLOWY_USERNAME} // 'test';
 my $wf_password = $ENV{WORKFLOWY_PASSWORD} // 'test';
 
 my $wfl = WWW::Workflowy->new();
+
+is($wfl->_check_client_version, 1, "client version is ok");
 
 is( $wfl->logged_in, 0, "before login, ->logged_in returns faslse" );
 dies_ok { $wfl->log_in('NOT_A_REAL_USER', 'NOT_A_REAL_PASSWORD_EITHER') } "invalid login attempt failed";

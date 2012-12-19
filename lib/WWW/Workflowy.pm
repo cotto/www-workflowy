@@ -158,6 +158,20 @@ has 'wf_uri' => (
 );
 
 
+=attr client_version
+
+workflowy-internal int that's used for API versioning; if this changes, API breakage is very likely
+
+=cut
+
+has 'client_version' => (
+  is => 'ro',
+  isa => 'Int',
+  init_arg => undef,
+  default => sub { 9 },
+);
+
+
 sub BUILD {
   my ($self, $args) = @_;
 
@@ -318,7 +332,7 @@ sub update_item {
 
   my $req_data = join('&',
     "client_id=$client_id".
-    "client_version=9",
+    "client_version=".$self->client_version(),
     "push_poll_id=".$self->_gen_push_poll_id(8),
     "push_poll_data=$push_poll_json");
 
@@ -384,7 +398,7 @@ sub create_item {
 
   my $req_data = join('&',
     "client_id=$client_id".
-    "client_version=9",
+    "client_version=".$self->client_version(),
     "push_poll_id=".$self->_gen_push_poll_id(8),
     "push_poll_data=$push_poll_json");
 
@@ -444,7 +458,7 @@ sub _last_transaction_id {
 
   my $req_data = join('&',
     "client_id=$client_id".
-    "client_version=9",
+    "client_version=".$self-client_version(),
     "push_poll_id=".$self->_gen_push_poll_id(8),
     "push_poll_data=$push_poll_json");
 
@@ -533,7 +547,7 @@ sub _build_parent_map {
 
 =method _build_parent_map_rec($children, $parent_id)
 
-Helper for _build_parent_map.
+helper for _build_parent_map
 
 =cut
 
@@ -546,6 +560,29 @@ sub _build_parent_map_rec {
       $self->_build_parent_map_rec($child->{id}, $child->{ch});
     }
   }
+}
+
+=method _check_client_version
+
+Try to check that Workflowy isn't serving an unknown version of their api.  If the version number from Workflowy is different from the hard-coded value from this module, return false.  Otherwise return true;
+
+=cut
+
+sub _check_client_version {
+  my ($self) = @_;
+
+  my $req = HTTP::Request->new( GET => $self->wf_uri."/media/js/source.js" );
+  my $resp = $self->ua->request($req);
+
+  unless ($resp->is_success) {
+    die __PACKAGE__." couldn't retrieve source.js: ".$resp->status_line;
+  }
+
+  # more ghetto js parsing
+  $resp->decoded_content =~ /CLIENT_VERSION=(?<client_version>\d+),/;
+  my $client_version = $+{client_version};
+
+  return !!($client_version == $self->client_version());
 }
 
 
