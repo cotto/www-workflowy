@@ -354,6 +354,9 @@ sub update_item {
   unless ($resp->is_success) {
     die __PACKAGE__." couldn't update item: ".$resp->status_line;
   }
+
+  my $resp_obj = decode_json($resp->decoded_content);
+  $self->_run_wf_ops($resp_obj);
 }
 
 
@@ -419,6 +422,10 @@ sub create_item {
   unless ($resp->is_success) {
     die __PACKAGE__." couldn't create new item: ".$resp->status_line;
   }
+
+  my $resp_obj = decode_json($resp->decoded_content);
+  $self->_run_wf_ops($resp_obj);
+
   return $child_id;
 }
 
@@ -509,8 +516,111 @@ sub _client_timestamp {
   return $mins_since_joined;
 }
 
+=method _run_wf_ops ()
+
+apply a set of operations from Workflowy to the local representation of the tree
+
+=cut
+
+sub _run_wf_ops {
+
+  my ($self, $commands) = @_;
+
+  if ($commands->{results}[0]{error_encountered_in_remote_operations}) {
+    die __PACKAGE__." Something broke when Workflowy tried to run that command.";
+  }
+
+  my $server_ops = decode_json($commands->{results}[0]{server_run_operation_transaction_json});
+
+  my %op_table = (
+    edit   => \&_apply_edit_op,
+    create => \&_apply_create_op,
+    move   => \&_apply_move_op,
+    delete => \&_apply_delete_op,
+    # nyi commands:
+    # complete
+    # uncomplete
+    # bulk_create
+    # undelete
+    # share
+    # unshare
+    # add_shared_email
+    # remove_shared_email
+    # register_shared_email_user
+    # make_shared_subtree_placeholder
+    # bulk_create
+  );
+
+  foreach my $op (@{$server_ops->{ops}}) {
+    my $op_type = $op->{type};
+    my $op_data = $op->{data};
+    unless (defined $op_table{$op_type}) {
+      die __PACKAGE__." unknown op type '$op_type'";
+    }
+    $self->($op_table{$op_type})($op_data);
+    use Data::Dumper;
+    print "OP RUNNING TIEM: op is '$op_type'";
+    print "data is ".Dumper($op_data);
 
 
+    # operations
+    #
+  }
+}
+
+=method _apply_create_op($op_data)
+
+Apply a create operation from Workflowy to the local tree.
+
+=cut
+
+sub _apply_create_op {
+  my ($self, $op_data) = @_;
+  # * create
+  #   projectid
+  #   priority
+  #   parentid
+}
+
+=method _apply_edit_op($op_data)
+
+Apply an edit operation from Workflowy to the local tree.
+
+=cut
+
+sub _apply_edit_op {
+  my ($self, $op_data) = @_;
+  # * edit
+  #   projectid
+  #   name (note: responses tend to have either a name xor a description)
+  #   description
+}
+
+=method _apply_move_op($op_data)
+
+Apply a move operation from Workflowy to the local tree.
+
+=cut
+
+sub _apply_move_op {
+  my ($self, $op_data) = @_;
+  # * move
+  #   projectid
+  #   parentid
+  #   priority
+}
+
+=method _apply_delete_op($op_data)
+
+Apply a delete operation from Workflowy to the local tree.
+
+=cut
+
+sub _apply_delete_op {
+  my ($self, $op_data) = @_;
+  # * delete (note that recursive deletion is implicit)
+  #   projectid
+}
 
 =method _gen_push_poll_id($len)
 
