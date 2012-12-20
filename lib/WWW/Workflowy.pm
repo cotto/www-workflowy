@@ -587,6 +587,8 @@ Try to check that Workflowy isn't serving an unknown version of their api.  If t
 sub _check_client_version {
   my ($self) = @_;
 
+  # Grab Workflowy's source.js file and use it to figure out what the current
+  # client version number is.
   my $req = HTTP::Request->new( GET => $self->wf_uri."/media/js/source.js" );
   my $resp = $self->ua->request($req);
 
