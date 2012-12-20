@@ -145,6 +145,18 @@ has 'parent_map' => (
   default => sub { {} },
 );
 
+=attr id_map
+
+internal cache that maps ids to item hashrefs
+
+=cut
+
+has 'id_map' => (
+  is => 'rw',
+  isa => 'HashRef',
+  default => sub { {} },
+);
+
 =attr wf_uri
 
 the url where Workflowy (or some hypothetical compatible service) lives
@@ -284,7 +296,7 @@ sub get_tree {
     }
   }
   $self->config->{start_time_in_ms} = floor( 1000 * str2time($self->config->{client_id}) );
-  $self->_build_parent_map();
+  $self->_update_maps();
 }
 
 
@@ -526,38 +538,42 @@ sub _gen_uuid {
 
 
 
-=method _build_parent_map
+=method _update_maps
 
-Calculate and cache information on each item's parents.
+Calculate and cache information on each item.
 
 =cut
 
-sub _build_parent_map {
+sub _update_maps {
   my ($self) = @_;
+
+  $self->parent_map( {} );
+  $self->id_map( {} );
 
   foreach my $child (@{$self->tree}) {
     my $current_parent = 'root';
     $self->parent_map->{ $child->{id} } = $current_parent;
+    $self->id_map->{ $child->{id} } = \$child;
     if (exists $child->{ch}) {
-      $self->_build_parent_map_rec($child->{id}, $child->{ch});
+      $self->_update_maps_rec($child->{id}, $child->{ch});
     }
   }
 }
 
+=method _update_maps_rec($children, $parent_id)
 
-=method _build_parent_map_rec($children, $parent_id)
-
-helper for _build_parent_map
+helper for _update_maps
 
 =cut
 
-sub _build_parent_map_rec {
+sub _update_maps_rec {
   my ($self, $parent_id, $children) = @_;
 
   foreach my $child (@$children) {
     $self->parent_map->{ $child->{id} } = $parent_id;
+    $self->id_map->{ $child->{id} } = \$child;
     if (exists $child->{ch}) {
-      $self->_build_parent_map_rec($child->{id}, $child->{ch});
+      $self->_update_maps_rec($child->{id}, $child->{ch});
     }
   }
 }
