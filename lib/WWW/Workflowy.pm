@@ -54,6 +54,8 @@ use JSON;
 
   Note that Workflowy do not currently attempt to maintain a stable API, so it is possible that this module could break without notice.  The maintainer of this module uses it on a daily basis and will try to keep it running, but using it for anything mission-critical is ill-advised.
 
+  This module is not officially affiliated with or supported by Workflowy.
+
 =cut
 
 
