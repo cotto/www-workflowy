@@ -72,6 +72,7 @@ the user agent used to access Workflowy
 has 'ua' => (
   is => 'ro',
   isa => 'LWP::UserAgent',
+  lazy => 1,
   default => sub {
     LWP::UserAgent->new(
       cookie_jar => {},
@@ -137,7 +138,9 @@ true if this instance has successfully logged in and hasn't logged out yet
 has 'logged_in' => (
   is        => 'rw',
   isa       => 'Bool',
-  default => sub { 0 },
+  default   => sub { 0 },
+  # when an object gets serialized, assume that the session and ua were destroyed
+  metaclass => 'DoNotSerialize',
 );
 
 =attr parent_map
@@ -194,7 +197,7 @@ has 'client_version' => (
 sub BUILD {
   my ($self, $args) = @_;
 
-  if (%$args) {
+  if (exists $args->{username} && exists $args->{password}) {
     $self->log_in($args->{username}, $args->{password});
     $self->get_tree();
   }
