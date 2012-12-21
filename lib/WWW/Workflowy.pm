@@ -4,12 +4,16 @@ package WWW::Workflowy;
 use strict;
 use warnings;
 use Moose;
+use MooseX::Storage;
 
 use HTTP::Request;
 use LWP::UserAgent;
 use Date::Parse;
 use POSIX;
 use JSON;
+
+with Storage('format' => 'YAML', 'io' => 'File');
+
 
 =head1 SYNOPSIS
 
@@ -66,14 +70,15 @@ the user agent used to access Workflowy
 =cut
 
 has 'ua' => (
-  'is' => 'ro',
-  'isa' => 'LWP::UserAgent',
-  'default' => sub {
+  is => 'ro',
+  isa => 'LWP::UserAgent',
+  default => sub {
     LWP::UserAgent->new(
       cookie_jar => {},
       agent      => 'WWW::Workflowy',
     );
   },
+  metaclass => 'DoNotSerialize',
 );
 
 =attr tree
@@ -290,15 +295,30 @@ sub get_tree {
       $self->tree($var_contents->{rootProjectChildren});
       delete $var_contents->{rootProjectChildren};
       foreach my $key (keys $var_contents) {
-        $self->config->{$key} = $var_contents->{$key};
+        $self->config->{$key} = $self->_unboolify($var_contents->{$key});
       }
     }
     else {
-      $self->config->{ lc $+{var_name} } = $var_contents;
+      $self->config->{ lc $+{var_name} } = $self->_unboolify($var_contents);
     }
   }
   $self->config->{start_time_in_ms} = floor( 1000 * str2time($self->config->{client_id}) );
   $self->_update_maps();
+}
+
+=method _unboolify($thing)
+
+If $thing is a JSON bool, return 0 or 1 appropriate so that serialization doesn't break.  Otherwise return the thing.
+
+=cut
+
+sub _unboolify {
+
+  my ($self, $thing) = @_;
+  if (JSON::is_bool($thing)) {
+    return $thing ? 1 : 0;
+  }
+  return $thing;
 }
 
 
