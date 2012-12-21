@@ -452,21 +452,6 @@ sub create_item {
 }
 
 
-
-=method find_parent_id($child_id)
-
-Given the id of a valid child, return the id of its immediate parent.
-
-=cut
-
-sub find_parent_id {
-  my ($self, $child_id) = @_;
-
-  return $self->parent_map->{ $child_id };
-}
-
-
-
 =method _last_transaction_id
 
 Return the id of the most recent transaction.
