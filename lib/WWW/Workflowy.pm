@@ -3,6 +3,7 @@ package WWW::Workflowy;
 # ABSTRACT: an unofficial API for Workflowy
 use strict;
 use warnings;
+use WWW::Workflowy::OpFactory;
 use Moose;
 use MooseX::Storage;
 
@@ -120,7 +121,7 @@ has 'config' => (
 
 =attr last_transaction_id
 
-stores the id of the most recent transaction
+stores the id of the most recent transaction according to Workflowy's server
 
 =cut
 
@@ -193,6 +194,35 @@ has 'client_version' => (
   default => sub { 9 },
 );
 
+=attr op_factory
+
+internal attribute used to deal with ops
+
+=cut
+
+has 'op_factory' => (
+  is => 'rw',
+  isa => 'WWW::Workflowy::OpFactory',
+  lazy => 1,
+  builder => '_build_op_factory',
+  metaclass => 'DoNotSerialize',
+);
+
+sub _build_op_factory { 
+  return WWW::Workflowy::OpFactory->new(wf => shift) 
+};
+
+=attr op_queue
+
+list of ops that haven't yet been submitted to wf
+
+=cut
+
+has op_queue => (
+  is => 'rw',
+  isa => 'ArrayRef',
+  default => sub { [] },
+);
 
 sub BUILD {
   my ($self, $args) = @_;
@@ -324,6 +354,41 @@ sub _unboolify {
   return $thing;
 }
 
+=method update_tree
+
+Retrieve all recent updates made to the tree from Workflowy.
+
+=cut
+
+sub update_tree {
+  my ($self) = @_;
+
+  my $push_poll_data = [
+    {
+      most_recent_operation_transaction_id => 88463899,
+    }
+  ];
+
+  my $req = HTTP::Request->new(POST => $self->wf_uri.'/push_and_poll');
+  $req->content_type('application/x-www-form-urlencoded');
+  my $push_poll_json = encode_json($push_poll_data);
+  my $client_id = $self->config->{client_id};
+
+  my $req_data = join('&',
+    "client_id=$client_id".
+    "client_version=".$self->client_version(),
+    "push_poll_id=".$self->_gen_push_poll_id(8),
+    "push_poll_data=$push_poll_json");
+
+  $req->content($req_data);
+  my $resp = $self->ua->request($req);
+  unless ($resp->is_success) {
+    die __PACKAGE__." couldn't create new item: ".$resp->status_line;
+  }
+
+  my $resp_obj = decode_json($resp->decoded_content);
+}
+
 
 =method update_item($item_data)
 
@@ -336,103 +401,48 @@ sub update_item {
 
   die __PACKAGE__." must be logged in before editing an item" unless $self->logged_in;
 
-  my $req = HTTP::Request->new(POST => $self->wf_uri.'/push_and_poll');
-  $req->content_type('application/x-www-form-urlencoded');
-  my $client_id = $self->config->{client_id};
-
-  # build the push/poll data
-  my $push_poll_data = [
+  my $edit_op = $self->op_factory->get_op('edit', 
     {
-      most_recent_operation_transaction_id => $self->_last_transaction_id(),
-      operations => [
-        {
-          type => 'edit',
-          data => {
-            projectid => $item_data->{id},
-            name => $item_data->{name},
-            description => $item_data->{note} // '',
-          },
-
-          # The wf web client sends this, but it doesn't appear to be strictly necessary.
-          #undo_data => {
-          #  previous_last_modified => '????',
-          #  previous_name => '????',
-          #},
-
-          client_timestamp => $self->_client_timestamp(),
-        },
-      ],
-    },
-  ];
-
-  my $push_poll_json = encode_json($push_poll_data);
-
-  my $req_data = join('&',
-    "client_id=$client_id".
-    "client_version=".$self->client_version(),
-    "push_poll_id=".$self->_gen_push_poll_id(8),
-    "push_poll_data=$push_poll_json");
-
-  $req->content($req_data);
-  my $resp = $self->ua->request($req);
-
-  unless ($resp->is_success) {
-    die __PACKAGE__." couldn't update item: ".$resp->status_line;
-  }
-
-  my $resp_obj = decode_json($resp->decoded_content);
-  $self->_run_wf_ops($resp_obj);
+      projectid => $item_data->{id},
+      name => $item_data->{name},
+      description => $item_data->{note} // '',
+    }
+  );
+  push $self->op_queue, $edit_op;
+  $self->submit_ops_and_update_tree;
 }
 
 
-=method create_item($parent_id, $child_data)
+=method submit_ops_and_update_tree($parent_id, $child_data)
 
-Create a child item below the specified parent and return the id of the new child.
+Send any queued ops to workflowy and update the tree according to what wf returns
 
 =cut
 
-sub create_item {
-  my ($self, $parent_id, $child_data) = @_;
+sub submit_ops_and_update_tree {
+  my ($self) = @_;
 
   die __PACKAGE__." must be logged in before calling create_item" unless $self->logged_in;
 
   my $req = HTTP::Request->new(POST => $self->wf_uri.'/push_and_poll');
   $req->content_type('application/x-www-form-urlencoded');
   my $client_id = $self->config->{client_id};
-  my $child_id = $self->_gen_uuid();
 
   # build the push/poll data
   my $push_poll_data = [
     {
-      most_recent_operation_transaction_id => $self->_last_transaction_id(),
-      operations => [
-        {
-          type => 'create',
-          data => {
-             projectid => $child_id,
-             parentid => $parent_id,
-             # priority determines the order in which this item is listed among its siblings
-             priority => $child_data->{priority} // 999,
-          },
-          undo_data => {},
-          client_timestamp => $self->_client_timestamp(),
-        },
-        {
-          type => "edit",
-          data => {
-            projectid => $child_id,
-            name => $child_data->{name},
-            description => $child_data->{note} // '',
-          },
-          undo_data => {
-            previous_last_modified => 293140,
-            previous_name => "",
-          },
-          client_timestamp => $self->_client_timestamp(),
-        },
-      ],
+      most_recent_operation_transaction_id => $self->last_transaction_id,
     },
   ];
+
+  if (scalar @{$self->op_queue()}) {
+    $push_poll_data->[0]{operations} = [];
+    while (scalar @{$self->op_queue}) {
+      my $op = shift $self->op_queue();
+      push $push_poll_data->[0]{operations}, $op->gen_push_poll_data;
+    }
+    $self->op_queue( [] );
+  }
 
   my $push_poll_json = encode_json($push_poll_data);
 
@@ -449,56 +459,42 @@ sub create_item {
   }
 
   my $resp_obj = decode_json($resp->decoded_content);
-  $self->_run_wf_ops($resp_obj);
-
-  return $child_id;
 }
 
 
-=method _last_transaction_id
 
-Return the id of the most recent transaction.
+=method create_item($parent_id, $child_data)
+
+Create a child item below the specified parent and return the id of the new child.
 
 =cut
 
-sub _last_transaction_id {
+sub create_item {
+  my ($self, $parent_id, $child_data) = @_;
 
-  my ($self) = @_;
+  die __PACKAGE__." must be logged in before calling create_item" unless $self->logged_in;
 
-  # TODO: this data is already in the tree under initialMostRecentOperationTransactionId
-  # TODO: invalidate/update this when an update is made
-
-  my $req = HTTP::Request->new(POST => $self->wf_uri.'/push_and_poll');
-  $req->content_type('application/x-www-form-urlencoded');
-  my $client_id = $self->config->{client_id};
-
-  my $push_poll_data = [
+  my $child_id = $self->_gen_uuid();
+  my $create_op = $self->op_factory->get_op('create',
     {
-      # Using a low value for this will cause workflowy to return all
-      # transactions since that one, so that's bad.  Using an invalid number
-      # causes an internal error in wf.  Using a number that's way too high
-      # will cause wf to send back the current
-      # new_most_recent_operation_transaction_id and no extra junk.
-      most_recent_operation_transaction_id => "999999999",
-    },
-  ];
+      projectid => $child_id,
+      parentid  => $parent_id,
+      priority  => $child_data->{priority} // 999,
+    }
+  );
+  push $self->op_queue, $create_op;
 
-  my $push_poll_json = encode_json($push_poll_data);
+  my $edit_op = $self->op_factory->get_op('edit',
+    {
+      projectid =>   $child_id,
+      name =>        $child_data->{name},
+      description => $child_data->{note} // '',
+    }
+  );
+  push $self->op_queue, $create_op;
+  $self->submit_ops_and_update_tree;
 
-  my $req_data = join('&',
-    "client_id=$client_id".
-    "client_version=".$self->client_version(),
-    "push_poll_id=".$self->_gen_push_poll_id(8),
-    "push_poll_data=$push_poll_json");
-
-  $req->content($req_data);
-  my $resp = $self->ua->request($req);
-  unless ($resp->is_success) {
-    die __PACKAGE__." couldn't get most recent transaction id: ".$resp->status_line;
-  }
-  my $wf_json = $resp->decoded_content();
-  $self->last_transaction_id(decode_json($wf_json)->{results}[0]{new_most_recent_operation_transaction_id});
-  return $self->last_transaction_id;
+  return $child_id;
 }
 
 =method _client_timestamp($wf_tree)
@@ -524,58 +520,6 @@ sub _client_timestamp {
   #my $start_time_in_ms = $wf_tree->{start_time_in_ms};
   #my $client_timestamp = $mins_since_joined + floor(($curr_time_in_ms - $start_time_in_ms) / 60_000);
   return $mins_since_joined;
-}
-
-=method _run_wf_ops ()
-
-apply a set of operations from Workflowy to the local representation of the tree
-
-=cut
-
-sub _run_wf_ops {
-
-  my ($self, $commands) = @_;
-
-  if ($commands->{results}[0]{error_encountered_in_remote_operations}) {
-    die __PACKAGE__." Something broke when Workflowy tried to run that command.";
-  }
-
-  my $server_ops = decode_json($commands->{results}[0]{server_run_operation_transaction_json});
-
-  my %op_table = (
-    edit   => \&_apply_edit_op,
-    create => \&_apply_create_op,
-    move   => \&_apply_move_op,
-    delete => \&_apply_delete_op,
-    # nyi commands:
-    # complete
-    # uncomplete
-    # bulk_create
-    # undelete
-    # share
-    # unshare
-    # add_shared_email
-    # remove_shared_email
-    # register_shared_email_user
-    # make_shared_subtree_placeholder
-    # bulk_create
-  );
-
-  foreach my $op (@{$server_ops->{ops}}) {
-    my $op_type = $op->{type};
-    my $op_data = $op->{data};
-    unless (defined $op_table{$op_type}) {
-      die __PACKAGE__." unknown op type '$op_type'";
-    }
-    $self->($op_table{$op_type})($op_data);
-    use Data::Dumper;
-    print "OP RUNNING TIEM: op is '$op_type'";
-    print "data is ".Dumper($op_data);
-
-
-    # operations
-    #
-  }
 }
 
 =method _apply_create_op($op_data)
