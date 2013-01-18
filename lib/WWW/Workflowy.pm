@@ -317,14 +317,15 @@ sub get_tree {
   # lucky for us, all the important variables are on a single line
 
   foreach my $line (split /\n/, $contents) {
-    next unless $line =~ m/^var/ && $line =~ m/;$/;
-    $line =~ m/^var (?<var_name>[A-Z_]+) = (?<var_json>.*);$/;
-    my $lc_name = lc $+{var_name};
+    next unless $line =~ m/\s*var/ && $line =~ m/;$/;
+    $line =~ m/var (?<var_name>[a-zA-Z_]+) = (?<var_json>.*);$/;
+    my $var_name = $+{var_name};
     my $var_contents = $json->decode($+{var_json});
 
     # consolidate all config info into $self->config and put the list structure
     # in $self->tree
-    if ($lc_name eq 'main_project_tree_info') {
+    #print "found var '$var_name'\n";
+    if ($var_name eq 'mainProjectTreeInfo') {
       $self->tree($var_contents->{rootProjectChildren});
       delete $var_contents->{rootProjectChildren};
       foreach my $key (keys $var_contents) {
@@ -332,10 +333,11 @@ sub get_tree {
       }
     }
     else {
-      $self->config->{ lc $+{var_name} } = $self->_unboolify($var_contents);
+      $self->config->{ $var_name } = $self->_unboolify($var_contents);
     }
   }
-  $self->config->{start_time_in_ms} = floor( 1000 * str2time($self->config->{client_id}) );
+  $self->config->{start_time_in_ms} = floor( 1000 * str2time($self->config->{clientId}) );
+  $self->last_transaction_id( $self->config->{initialMostRecentOperationTransactionId} );
   $self->_update_maps();
 }
 
