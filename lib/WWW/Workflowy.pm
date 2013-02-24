@@ -191,7 +191,7 @@ has 'client_version' => (
   is => 'ro',
   isa => 'Int',
   init_arg => undef,
-  default => sub { 9 },
+  default => sub { 10 },
 );
 
 
