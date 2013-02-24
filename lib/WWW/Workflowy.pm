@@ -439,24 +439,24 @@ sub update_item {
     }
   );
   push $self->op_queue, $edit_op;
-  $self->submit_ops_and_update_tree;
+  $self->submit_ops;
 }
 
 
-=method submit_ops_and_update_tree($parent_id, $child_data)
+=method submit_ops($parent_id, $child_data)
 
-Send any queued ops to workflowy and update the tree according to what wf returns
+Send any queued ops to workflowy and update the tree according to what wf returns.
 
 =cut
 
-sub submit_ops_and_update_tree {
+sub submit_ops {
   my ($self) = @_;
 
-  die __PACKAGE__." must be logged in before calling create_item" unless $self->logged_in;
+  die __PACKAGE__." must be logged in before submitting ops " unless $self->logged_in;
 
   my $req = HTTP::Request->new(POST => $self->wf_uri.'/push_and_poll');
   $req->content_type('application/x-www-form-urlencoded');
-  my $client_id = $self->config->{client_id};
+  my $client_id = $self->config->{clientId};
 
   # build the push/poll data
   my $push_poll_data = [
@@ -488,7 +488,8 @@ sub submit_ops_and_update_tree {
     die __PACKAGE__." couldn't create new item: ".$resp->status_line;
   }
 
-  my $resp_obj = decode_json($resp->decoded_content);
+  my $pp_resp = decode_json($resp->decoded_content);
+  #$self->update_tree($pp_resp);
 }
 
 
@@ -522,7 +523,7 @@ sub create_item {
     }
   );
   push $self->op_queue, $create_op;
-  $self->submit_ops_and_update_tree;
+  $self->submit_ops;
 
   return $child_id;
 }
