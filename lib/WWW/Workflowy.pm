@@ -194,6 +194,18 @@ has 'client_version' => (
   default => sub { 9 },
 );
 
+
+=attr tree_token
+
+token that's needed to retrieve tree data; needs to be scraped from the intial login page
+
+=cut
+
+has 'tree_token' => (
+  is => 'rw',
+  isa => 'Str',
+);
+
 =attr op_factory
 
 internal attribute used to deal with ops
@@ -267,11 +279,27 @@ sub log_in {
   # 302 means that the login definitely succeeded.
   if ($resp->code == 302) {
     $self->logged_in(1);
+    $self->_scrape_tree_token;
     return;
   }
 
   # Anything else probably means that the login failed.
   die __PACKAGE__.": login attempt failed for user '$username'";
+}
+
+=method _scrape_tree_token
+
+Scrape the post-login page for the token needed to download initial tree data.
+
+=cut
+
+sub _scrape_tree_token {
+    my ($self) = @_;
+    # etProjectTreeDataScri pt" src="/get_project_tree_data?t=LTDeiHKo8FwoK1KC6qtTAsUSjx1hsM2R" type="text/javascript" ></script>
+    my $req = HTTP::Request->new(GET => $self->wf_uri.'/');
+    my $resp = $self->ua->request($req);
+    $resp->decoded_content =~ m!src="/get_project_tree_data\?t=([^"]+)"!;
+    $self->tree_token($1);
 }
 
 
@@ -304,7 +332,7 @@ sub get_tree {
 
   die __PACKAGE__." must be logged in before calling get_tree" unless $self->logged_in;
 
-  my $req = HTTP::Request->new(GET => $self->wf_uri.'/get_project_tree_data');
+  my $req = HTTP::Request->new(GET => $self->wf_uri.'/get_project_tree_data?t='.$self->tree_token);
   my $resp = $self->ua->request($req);
   unless ($resp->is_success) {
     die __PACKAGE__." couldn't retrieve tree: ".$resp->status_line;
