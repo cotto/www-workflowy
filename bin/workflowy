@@ -1,0 +1,56 @@
+#!/usr/bin/env perl
+
+=head1 SYNOPSIS
+
+    workflowy size FOLDER
+
+        Print the number of incomplete items in a folder.
+
+=cut
+
+use strict;
+use warnings;
+
+use 5.010;
+
+use Pod::Usage;
+use WWW::Workflowy;
+
+use Config::Tiny;
+
+sub config {
+    my $file = "$ENV{HOME}/.workflowy.cfg";
+    die "Config '$file' not found" unless -e $file;
+    my $config = Config::Tiny->read($file);
+    return $config->{_};
+}
+
+sub wf {
+    state $wf = WWW::Workflowy->new(%{ config() });
+    return $wf;
+}
+
+sub size {
+    pod2usage(2) unless @_ == 1;
+    my ($folder_name) = @_;
+
+    my ($folder) = grep { $_->{nm} eq $folder_name } @{ wf->tree };
+    die "Folder $folder_name not found" unless $folder;
+
+    my @items = grep { not defined $_->{cp} } @{ $folder->{ch} };
+    say scalar @items;
+}
+
+sub main {
+    pod2usage(2) unless @_ > 0;
+    my $command = shift;
+
+    if ($command eq 'size') {
+        size(@_);
+    }
+    else {
+        die "command $command is not supported";
+    }
+}
+
+main(@ARGV) unless caller;
