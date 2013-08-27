@@ -195,17 +195,6 @@ has 'client_version' => (
 );
 
 
-=attr tree_token
-
-token that's needed to retrieve tree data; needs to be scraped from the intial login page
-
-=cut
-
-has 'tree_token' => (
-  is => 'rw',
-  isa => 'Str',
-);
-
 =attr op_factory
 
 internal attribute used to deal with ops
@@ -279,30 +268,12 @@ sub log_in {
   # 302 means that the login definitely succeeded.
   if ($resp->code == 302) {
     $self->logged_in(1);
-    $self->_scrape_tree_token;
     return;
   }
 
   # Anything else probably means that the login failed.
   die __PACKAGE__.": login attempt failed for user '$username'";
 }
-
-=method _scrape_tree_token
-
-Scrape the post-login page for the token needed to download initial tree data.
-
-=cut
-
-sub _scrape_tree_token {
-    my ($self) = @_;
-    # etProjectTreeDataScri pt" src="/get_project_tree_data?t=LTDeiHKo8FwoK1KC6qtTAsUSjx1hsM2R" type="text/javascript" ></script>
-    my $req = HTTP::Request->new(GET => $self->wf_uri.'/');
-    my $resp = $self->ua->request($req);
-    $resp->decoded_content =~ m!src="/get_project_tree_data\?t=([^"]+)"!;
-    $self->tree_token($1);
-}
-
-
 
 =method log_out($ua)
 
@@ -332,30 +303,23 @@ sub get_tree {
 
   die __PACKAGE__." must be logged in before calling get_tree" unless $self->logged_in;
 
-  my $req = HTTP::Request->new(GET => $self->wf_uri.'/get_project_tree_data?t='.$self->tree_token);
+  my $req = HTTP::Request->new(GET => $self->wf_uri.'/get_initialization_data');
   my $resp = $self->ua->request($req);
   unless ($resp->is_success) {
     die __PACKAGE__." couldn't retrieve tree: ".$resp->status_line;
   }
 
-  my $contents = $resp->decoded_content;
   my $json = JSON->new->allow_nonref;
+  my $config = $json->decode($resp->decoded_content);
 
-  # do some ghetto js parsing
-  # lucky for us, all the important variables are on a single line
-
-  foreach my $line (split /\n/, $contents) {
-    next unless $line =~ m/\s*var/ && $line =~ m/;$/;
-    $line =~ m/var (?<var_name>[a-zA-Z_]+) = (?<var_json>.*);$/;
-    my $var_name = $+{var_name};
-    my $var_contents = $json->decode($+{var_json});
+  print "getting config\n ";
+  $self->tree( delete $config->{projectTreeData}{mainProjectTreeInfo}{rootProjectChildren} );
+  while( my ($var_name, $var_contents) = each $config->{projectTreeData} ) {
 
     # consolidate all config info into $self->config and put the list structure
     # in $self->tree
     #print "found var '$var_name'\n";
     if ($var_name eq 'mainProjectTreeInfo') {
-      $self->tree($var_contents->{rootProjectChildren});
-      delete $var_contents->{rootProjectChildren};
       foreach my $key (keys $var_contents) {
         $self->config->{$key} = $self->_unboolify($var_contents->{$key});
       }
