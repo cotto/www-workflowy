@@ -486,7 +486,7 @@ sub create_item {
       description => $child_data->{note} // '',
     }
   );
-  push $self->op_queue, $create_op;
+  push $self->op_queue, $edit_op;
   $self->submit_ops;
 
   return $child_id;
