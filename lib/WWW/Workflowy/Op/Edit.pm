@@ -1,4 +1,5 @@
 package WWW::Workflowy::Op::Edit;
+use URI::Escape;
 use Moose;
 
 with 'WWW::Workflowy::Op';
@@ -20,9 +21,9 @@ sub gen_push_poll_data {
   my $pp_data = { 
     type => 'edit',
     data => {
-      projectid => $self->projectid,
-      name => $self->name,
-      description => $self->description,
+      projectid   => $self->projectid,
+      name        => uri_escape($self->name),
+      description => url_escape($self->description),
     },
     undo_data => {
     },
